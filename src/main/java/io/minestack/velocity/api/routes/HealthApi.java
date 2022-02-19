@@ -6,6 +6,7 @@ import io.javalin.http.Context;
 import io.javalin.http.HttpCode;
 import io.minestack.velocity.event.api.LivenessProbeEvent;
 import io.minestack.velocity.event.api.ReadinessProbeEvent;
+import org.slf4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -16,16 +17,18 @@ import java.util.concurrent.ExecutionException;
 public class HealthApi {
 
     private final ProxyServer server;
+    private final Logger logger;
 
-    public HealthApi(ProxyServer server) {
+    public HealthApi(ProxyServer server, Logger logger) {
         this.server = server;
+        this.logger = logger;
     }
 
     public void healthz(Context ctx) throws ExecutionException, InterruptedException {
         HttpCode responseCode = HttpCode.OK;
 
         LivenessProbeEvent event = new LivenessProbeEvent(responseCode);
-        CompletableFuture<LivenessProbeEvent> futureProbe = server.getEventManager().fire(event);
+        CompletableFuture<LivenessProbeEvent> futureProbe = this.server.getEventManager().fire(event);
         event = futureProbe.get();
 
         ctx.status(event.getResponseCode());
@@ -44,16 +47,18 @@ public class HealthApi {
             groupNames.add(envName.substring(envPrefix.length()));
         }
 
-        for (String joinServer : groupNames) {
-            Collection<RegisteredServer> servers = server.matchServer("server-group-" + joinServer);
+        for (String groupName : groupNames) {
+            String matchServerName = "server-group-" + groupName;
+            Collection<RegisteredServer> servers = this.server.matchServer(matchServerName);
             if (servers.size() == 0) {
+                this.logger.warn("Cannot find any registered servers for " + matchServerName);
                 responseCode = HttpCode.SERVICE_UNAVAILABLE;
                 break;
             }
         }
 
         ReadinessProbeEvent event = new ReadinessProbeEvent(responseCode);
-        CompletableFuture<ReadinessProbeEvent> futureProbe = server.getEventManager().fire(event);
+        CompletableFuture<ReadinessProbeEvent> futureProbe = this.server.getEventManager().fire(event);
         event = futureProbe.get();
 
         ctx.status(event.getResponseCode());

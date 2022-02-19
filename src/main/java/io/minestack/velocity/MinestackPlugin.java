@@ -40,7 +40,7 @@ public class MinestackPlugin {
             config.jsonMapper(new GsonJsonMapper());
         });
 
-        HealthApi healthApi = new HealthApi(server);
+        HealthApi healthApi = new HealthApi(server, logger);
         ServerGroupApi serverGroupApi = new ServerGroupApi(server, logger);
 
         app.routes(() -> {

@@ -35,7 +35,9 @@ public class ServerGroupApi {
         Map<String, ServerInfo> newServers = new HashMap<>();
 
         for (Map.Entry<String, String> entry : serverGroup.getServers().entrySet()) {
-            ServerInfo serverInfo = new ServerInfo("server-group-" + serverGroup.getName() + "-" + entry.getKey(), new InetSocketAddress(entry.getValue(), 25565));
+            String serverName = "server-group-" + serverGroup.getName() + "-" + entry.getKey();
+            this.logger.info("Registering server " + serverName);
+            ServerInfo serverInfo = new ServerInfo(serverName, new InetSocketAddress(entry.getValue(), 25565));
             newServers.put(serverInfo.getName(), serverInfo);
             this.server.registerServer(serverInfo);
         }
@@ -45,6 +47,7 @@ public class ServerGroupApi {
             // server DNE so remove it
             if (!newServers.containsKey(existingServer.getServerInfo().getName())) {
                 // unregister server
+                this.logger.info("Unregistering server " + existingServer.getServerInfo());
                 this.server.unregisterServer(existingServer.getServerInfo());
 
                 // kick all players on server back to the first server in "try"
