@@ -50,7 +50,7 @@ public class HealthApi {
         for (String groupName : groupNames) {
             String matchServerName = "server-group-" + groupName;
             Collection<RegisteredServer> servers = this.server.matchServer(matchServerName);
-            if (servers.size() == 0) {
+            if (servers.size() == 0) { // TODO: we need to accommodate sizes of 0
                 this.logger.warn("Cannot find any registered servers for " + matchServerName);
                 responseCode = HttpCode.SERVICE_UNAVAILABLE;
                 break;
