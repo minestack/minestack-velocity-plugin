@@ -1,27 +1,28 @@
 package io.minestack.velocity.api.routes;
 
 import com.velocitypowered.api.proxy.ProxyServer;
-import com.velocitypowered.api.proxy.server.RegisteredServer;
 import io.javalin.http.Context;
 import io.javalin.http.HttpCode;
+import io.minestack.velocity.MinestackPlugin;
 import io.minestack.velocity.event.api.LivenessProbeEvent;
 import io.minestack.velocity.event.api.ReadinessProbeEvent;
 import org.slf4j.Logger;
 
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 
 public class HealthApi {
 
+    private final MinestackPlugin plugin;
     private final ProxyServer server;
     private final Logger logger;
 
-    public HealthApi(ProxyServer server, Logger logger) {
-        this.server = server;
-        this.logger = logger;
+    public HealthApi(MinestackPlugin plugin) {
+        this.plugin = plugin;
+        this.server = this.plugin.getServer();
+        this.logger = this.plugin.getLogger();
     }
 
     public void healthz(Context ctx) throws ExecutionException, InterruptedException {
@@ -38,8 +39,10 @@ public class HealthApi {
         HttpCode responseCode = HttpCode.OK;
 
         List<String> groupNames = new ArrayList<>();
+        List<String> tryGroupNames = this.server.getConfiguration().getAttemptConnectionOrder();
         String envPrefix = "MINESTACK_SERVER_GROUP_";
 
+        // add groups from env
         for (String envName : System.getenv().keySet()) {
             if (!envName.startsWith(envPrefix)) {
                 continue;
@@ -47,11 +50,19 @@ public class HealthApi {
             groupNames.add(envName.substring(envPrefix.length()));
         }
 
+        // groups from env
         for (String groupName : groupNames) {
-            String matchServerName = "server-group-" + groupName;
-            Collection<RegisteredServer> servers = this.server.matchServer(matchServerName);
-            if (servers.size() == 0) { // TODO: we need to accommodate sizes of 0
-                this.logger.warn("Cannot find any registered servers for " + matchServerName);
+            if (this.plugin.getServerGroups().getServerGroup(groupName).isEmpty()) {
+                this.logger.warn("HealthApi: Cannot find any registered group for {} in the environment", groupName);
+                responseCode = HttpCode.SERVICE_UNAVAILABLE;
+                break;
+            }
+        }
+
+        // groups from try
+        for (String groupName : tryGroupNames) {
+            if (this.plugin.getServerGroups().getServerGroup(groupName).isEmpty()) {
+                this.logger.warn("HealthApi: Cannot find any registered group for {} in the try list", groupName);
                 responseCode = HttpCode.SERVICE_UNAVAILABLE;
                 break;
             }

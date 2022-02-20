@@ -2,11 +2,12 @@ package io.minestack.velocity.api.routes;
 
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.ProxyServer;
-import com.velocitypowered.api.proxy.server.RegisteredServer;
 import com.velocitypowered.api.proxy.server.ServerInfo;
 import io.javalin.http.Context;
 import io.javalin.http.HttpCode;
-import io.minestack.velocity.api.models.ServerGroup;
+import io.minestack.velocity.MinestackPlugin;
+import io.minestack.velocity.proxy.server.RegisteredServerGroupServer;
+import io.minestack.velocity.proxy.server.ServerGroup;
 import org.slf4j.Logger;
 
 import java.net.InetSocketAddress;
@@ -17,42 +18,49 @@ import java.util.Map;
 
 public class ServerGroupApi {
 
+    private final MinestackPlugin plugin;
     private final ProxyServer server;
     private final Logger logger;
 
-    public ServerGroupApi(ProxyServer server, Logger logger) {
-        this.server = server;
-        this.logger = logger;
+    public ServerGroupApi(MinestackPlugin plugin) {
+        this.plugin = plugin;
+        this.server = this.plugin.getServer();
+        this.logger = this.plugin.getLogger();
     }
 
     public void post(Context ctx) {
-        ServerGroup serverGroup = ctx.bodyStreamAsClass(ServerGroup.class);
+        io.minestack.velocity.api.models.ServerGroup serverGroupModel = ctx.bodyStreamAsClass(io.minestack.velocity.api.models.ServerGroup.class);
+
+        ServerGroup serverGroup = this.plugin.getServerGroups().createServerGroup(serverGroupModel.getName());
+
+        // register group in master list
+        this.server.registerServer(new ServerInfo(serverGroup.getName(), new InetSocketAddress("127.0.0.1", 25565)));
 
         // existing servers
-        Collection<RegisteredServer> existingServersInGroup = this.server.matchServer("server-group-" + serverGroup.getName());
+        Collection<RegisteredServerGroupServer> existingServersInGroup = serverGroup.getAllServers();
 
         // new servers
         Map<String, ServerInfo> newServers = new HashMap<>();
 
-        for (Map.Entry<String, String> entry : serverGroup.getServers().entrySet()) {
-            String serverName = "server-group-" + serverGroup.getName() + "-" + entry.getKey();
-            this.logger.info("Registering server " + serverName);
+        for (Map.Entry<String, String> entry : serverGroupModel.getServers().entrySet()) {
+            String serverName = entry.getKey();
+            this.logger.info("ServerGroupApi: Registering server {}/{}", serverGroup.getName(), serverName);
             ServerInfo serverInfo = new ServerInfo(serverName, new InetSocketAddress(entry.getValue(), 25565));
             newServers.put(serverInfo.getName(), serverInfo);
-            this.server.registerServer(serverInfo);
+            serverGroup.register(serverInfo);
         }
 
         // remove no longer existing servers
-        for (RegisteredServer existingServer : existingServersInGroup) {
+        for (RegisteredServerGroupServer existingServer : existingServersInGroup) {
             // server DNE so remove it
             if (!newServers.containsKey(existingServer.getServerInfo().getName())) {
                 // unregister server
-                this.logger.info("Unregistering server " + existingServer.getServerInfo());
-                this.server.unregisterServer(existingServer.getServerInfo());
+                this.logger.info("ServerGroupApi: Unregistering server {}", existingServer.getServerInfo());
+                serverGroup.unregister(existingServer.getServerInfo());
 
-                // kick all players on server back to the first server in "try"
+                // move all players on server back to the first group in "try"
                 for (Player player : existingServer.getPlayersConnected()) {
-                    player.createConnectionRequest(this.server.getServer(this.server.getConfiguration().getAttemptConnectionOrder().get(0)).orElseThrow()).connectWithIndication();
+                    this.plugin.getServerGroups().getServerGroup(this.server.getConfiguration().getAttemptConnectionOrder().get(0)).orElseThrow().createConnectionRequest(player).connectWithIndication();
                 }
             }
         }

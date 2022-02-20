@@ -9,6 +9,7 @@ import io.javalin.Javalin;
 import io.minestack.velocity.api.routes.HealthApi;
 import io.minestack.velocity.api.routes.ServerGroupApi;
 import io.minestack.velocity.listeners.PlayerListener;
+import io.minestack.velocity.proxy.server.ServerGroupMap;
 import io.minestack.velocity.utils.GsonJsonMapper;
 import org.slf4j.Logger;
 
@@ -18,18 +19,35 @@ public class MinestackPlugin {
 
     private final ProxyServer server;
     private final Logger logger;
+    private final ServerGroupMap serverGroups;
 
     @Inject
     public MinestackPlugin(ProxyServer server, Logger logger) {
         this.server = server;
         this.logger = logger;
+        this.serverGroups = new ServerGroupMap(this.server, this.logger);
+    }
+
+    public Logger getLogger() {
+        return logger;
+    }
+
+    public ProxyServer getServer() {
+        return server;
+    }
+
+    public ServerGroupMap getServerGroups() {
+        return serverGroups;
     }
 
     @Subscribe
     public void onProxyInitialization(ProxyInitializeEvent event) {
         logger.info("Starting Minestack Plugin");
-        server.getEventManager().register(this, new PlayerListener(server, logger));
 
+        // event listeners
+        server.getEventManager().register(this, new PlayerListener(this));
+
+        // HTTP API
         ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
         Thread.currentThread().setContextClassLoader(MinestackPlugin.class.getClassLoader());
 
@@ -40,8 +58,8 @@ public class MinestackPlugin {
             config.jsonMapper(new GsonJsonMapper());
         });
 
-        HealthApi healthApi = new HealthApi(server, logger);
-        ServerGroupApi serverGroupApi = new ServerGroupApi(server, logger);
+        HealthApi healthApi = new HealthApi(this);
+        ServerGroupApi serverGroupApi = new ServerGroupApi(this);
 
         app.routes(() -> {
             app.get("healthz", healthApi::healthz);
