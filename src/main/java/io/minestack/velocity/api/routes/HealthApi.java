@@ -6,10 +6,12 @@ import io.javalin.http.HttpCode;
 import io.minestack.velocity.MinestackPlugin;
 import io.minestack.velocity.event.api.LivenessProbeEvent;
 import io.minestack.velocity.event.api.ReadinessProbeEvent;
+import io.minestack.velocity.proxy.server.ServerGroup;
 import org.slf4j.Logger;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 
@@ -60,9 +62,17 @@ public class HealthApi {
         }
 
         // groups from try
+        // we require at least 1 server present from each try
         for (String groupName : tryGroupNames) {
-            if (this.plugin.getServerGroups().getServerGroup(groupName).isEmpty()) {
+            Optional<ServerGroup> serverGroup = this.plugin.getServerGroups().getServerGroup(groupName);
+            if (serverGroup.isEmpty()) {
                 this.logger.warn("HealthApi: Cannot find any registered group for {} in the try list", groupName);
+                responseCode = HttpCode.SERVICE_UNAVAILABLE;
+                break;
+            }
+
+            if (serverGroup.get().getAllServers().size() == 0) {
+                this.logger.warn("HealthApi: Cannot find any registered servers for group {} in the try list", groupName);
                 responseCode = HttpCode.SERVICE_UNAVAILABLE;
                 break;
             }
